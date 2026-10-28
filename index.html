@@ -13,7 +13,6 @@
       --phosphor-dim: #008f39;
       --phosphor-bright: #66ff99;
       --bg: #050a05;
-      --scanline: rgba(0, 20, 0, 0.4);
     }
 
     * {
@@ -33,31 +32,6 @@
       display: flex;
       flex-direction: column;
       text-shadow: 0 0 6px rgba(0, 255, 102, 0.45);
-    }
-
-    /* CRT Overlay & Scanline Effects */
-    .crt-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      pointer-events: none;
-      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%),
-                  linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-      background-size: 100% 3px, 3px 100%;
-      z-index: 100;
-    }
-
-    .crt-vignette {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.9);
-      pointer-events: none;
-      z-index: 99;
     }
 
     /* Top Status Bar */
@@ -95,15 +69,21 @@
       display: flex;
       gap: 8px;
     }
+    .msg-text {
+      white-space: pre-wrap;
+    }
     .ts {
       color: var(--phosphor-dim);
+      white-space: nowrap;
     }
     .user-self {
       color: var(--phosphor-bright);
       font-weight: bold;
+      white-space: nowrap;
     }
     .user-peer {
       color: #70db93;
+      white-space: nowrap;
     }
     .sys-msg {
       color: var(--phosphor-dim);
@@ -145,13 +125,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
-  <div class="crt-overlay"></div>
-  <div class="crt-vignette"></div>
-
   <header>
-    <span>[SECURE NODE // RELAY-02]</span>
-    <span id="header-user">SESSION: LOCKED</span>
     <span id="clock">--:--:--</span>
+    <span id="header-user">SESSION: LOCKED</span>
   </header>
 
   <main id="terminal"></main>
@@ -162,24 +138,31 @@
   </footer>
 
   <script>
-    // ==========================================
-    // 1. CONFIGURATION (PASTE YOUR DETAILS HERE)
-    // ==========================================
-    const SECRET_PASSWORD = "@kcguevS08w"; // Set your secret access password
+    const SECRET_PASSWORD = "@kcguevS08w";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyA_hKOx4wb17A3PItA32pHLuXgofG2P9Ig",
-    authDomain: "retro-terminal-aa057.firebaseapp.com",
-    projectId: "retro-terminal-aa057",
-    storageBucket: "retro-terminal-aa057.firebasestorage.app",
-    messagingSenderId: "905629346840",
-    appId: "1:905629346840:web:b1708470592011e9d8a76d"
+    const HEART_ART = 
+`⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿`;
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA_hKOx4wb17A3PItA32pHLuXgofG2P9Ig",
+      authDomain: "retro-terminal-aa057.firebaseapp.com",
+      projectId: "retro-terminal-aa057",
+      storageBucket: "retro-terminal-aa057.firebasestorage.app",
+      messagingSenderId: "905629346840",
+      appId: "1:905629346840:web:b1708470592011e9d8a76d"
     };
 
-    // ==========================================
-    // 2. STATE & ELEMENT BINDINGS
-    // ==========================================
-    let currentStep = "PASSWORD"; // Stages: PASSWORD -> USERNAME -> CHAT
+    let currentStep = "PASSWORD"; 
     let currentUser = "";
     let db = null;
     let messagesRef = null;
@@ -205,20 +188,7 @@
       terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Boot Banner
-    function printBootSequence() {
-      writeLine("=================================================");
-      writeLine("  CLASSIFIED PRIVATE COMMUNICATION CHANNEL v1.0  ");
-      writeLine("  RESTRICTED ACCESS // NODE-02 ENCRYPTED RELAY   ");
-      writeLine("=================================================");
-      writeLine("INITIALIZING AUTHENTICATION PROTOCOL...");
-      writeLine("PLEASE ENTER ACCESS AUTHORIZATION KEY.");
-    }
-    printBootSequence();
-
-    // ==========================================
-    // 3. INPUT HANDLER & COMMAND PARSER
-    // ==========================================
+    // Input Handler & Command Parser
     input.addEventListener("keydown", async (e) => {
       if (e.key !== "Enter") return;
       const val = input.value.trim();
@@ -290,6 +260,19 @@
           return;
         }
 
+        // Hidden Command: /mwa
+        if (val === "/mwa") {
+          if (messagesRef) {
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            messagesRef.push({
+              user: currentUser,
+              text: HEART_ART,
+              time: timestamp
+            });
+          }
+          return;
+        }
+
         // Send Message to Firebase Realtime Database
         if (messagesRef) {
           const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -302,9 +285,7 @@
       }
     });
 
-    // ==========================================
-    // 4. FIREBASE REALTIME CONNECTION
-    // ==========================================
+    // Firebase Realtime Connection
     function initFirebase() {
       try {
         if (!firebase.apps.length) {
@@ -321,13 +302,10 @@
           const isSelf = data.user === currentUser;
           const userClass = isSelf ? "user-self" : "user-peer";
           
-          writeLine(`
-            <div class="msg-row">
-              <span class="ts">[${data.time}]</span>
-              <span class="${userClass}">&lt;${data.user}&gt;</span>
-              <span>${escapeHtml(data.text)}</span>
-            </div>
-          `);
+          writeLine(
+            `<span class="ts">[${data.time}]</span> <span class="${userClass}">&lt;${data.user}&gt;</span> <span class="msg-text">${escapeHtml(data.text)}</span>`,
+            "msg-row"
+          );
         });
 
       } catch (err) {
