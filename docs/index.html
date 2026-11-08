@@ -66,6 +66,7 @@
       min-width: 380px;
       max-width: 90%;
       z-index: 20;
+      pointer-events: none;
     }
 
     #center-overlay.hidden {
@@ -166,7 +167,7 @@
       padding: 10px 16px;
       background: var(--bar-bg);
       border-top: 1px solid var(--phosphor-dim);
-      z-index: 10;
+      z-index: 30;
     }
 
     #prompt-label {
@@ -220,19 +221,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
   <script>
     const SECRET_PASSWORD = "@kcguevS08w";
     let attemptsRemaining = 3;
-
-    const HEART_ART = 
-`⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿`;
 
     // perichat Firebase Credentials
     const firebaseConfig = {
@@ -643,18 +631,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
           return;
         }
 
-        if (val === "/mwa") {
-          if (messagesRef) {
-            messagesRef.push({
-              user: currentUser,
-              text: HEART_ART,
-              gifUrl: null,
-              time: getMilitaryTime()
-            });
-          }
-          return;
-        }
-
         if (val === "/help") {
           const helpManual = 
 `======================= COMMAND DIRECTIVES =======================
@@ -664,7 +640,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
   /clear     Flush local terminal screen buffer
   /whoami    Display active operator handle
   /purge     Permanently erase all archived logs from cloud
-  /mwa       Transmits love directive
 ==================================================================`;
           writeLine(helpManual, "sys-msg");
           return;
