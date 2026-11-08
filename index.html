@@ -67,6 +67,11 @@
     /* Messages & Logs */
     .msg-row {
       display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .msg-header {
+      display: flex;
       gap: 8px;
     }
     .msg-text {
@@ -92,6 +97,27 @@
     .sys-err {
       color: #ff3333;
       text-shadow: 0 0 6px rgba(255, 51, 51, 0.5);
+    }
+
+    /* High-Density ASCII Display */
+    .ascii-display-wrapper {
+      margin-top: 4px;
+      padding: 6px;
+      background: #001105;
+      border: 1px dashed var(--phosphor-dim);
+      display: inline-block;
+      max-width: fit-content;
+    }
+    .ascii-display {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 5.5px;
+      line-height: 5.5px;
+      letter-spacing: 0px;
+      color: var(--phosphor);
+      white-space: pre;
+      margin: 0;
+      user-select: none;
+      text-shadow: none;
     }
 
     /* Bottom Command Prompt */
@@ -120,6 +146,10 @@
       text-shadow: 0 0 6px rgba(0, 255, 102, 0.6);
     }
   </style>
+
+  <!-- omggif: GIF binary decoder -->
+  <script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
+
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -172,10 +202,12 @@
     const promptLabel = document.getElementById("prompt-label");
     const headerUser = document.getElementById("header-user");
 
-    // Real-time Header Clock
+    function getMilitaryTime() {
+      return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    }
+
     function updateClock() {
-      const now = new Date();
-      document.getElementById("clock").textContent = now.toTimeString().split(" ")[0];
+      document.getElementById("clock").textContent = getMilitaryTime();
     }
     setInterval(updateClock, 1000);
     updateClock();
@@ -186,7 +218,210 @@
       div.innerHTML = text;
       terminal.appendChild(div);
       terminal.scrollTop = terminal.scrollHeight;
+      return div;
     }
+
+    // --- HIGH-DENSITY ASCII ENGINE (STATIC IMAGES & ANIMATED GIFS) ---
+    const DENSITY_RAMP = " .:-=+*#%@";
+    const TARGET_W = 80;
+    const TARGET_H = 36;
+
+    function extractMediaUrl(str) {
+      const urlRegex = /(https?:\/\/[^\s]+(?:\.(?:gif|png|jpe?g|webp)(?:\?[^\s]*)?|tenor\.com\/[^\s]+|giphy\.com\/[^\s]+))/i;
+      const match = str.match(urlRegex);
+      return match ? match[0] : null;
+    }
+
+    function convertPixelsToAscii(ctx, w, h) {
+      const sample = ctx.getImageData(0, 0, w, h).data;
+      let frameStr = "";
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          const r = sample[idx];
+          const g = sample[idx + 1];
+          const b = sample[idx + 2];
+          const a = sample[idx + 3];
+
+          if (a < 64) {
+            frameStr += " ";
+          } else {
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            const charIdx = Math.floor(lum * (DENSITY_RAMP.length - 1));
+            frameStr += DENSITY_RAMP[charIdx];
+          }
+        }
+        frameStr += "\n";
+      }
+      return frameStr;
+    }
+
+    async function fetchRawBytes(rawUrl) {
+      if (rawUrl.startsWith("data:")) {
+        const base64Data = rawUrl.split(",")[1];
+        const binaryStr = atob(base64Data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        return bytes;
+      }
+
+      const proxyList = [
+        `https://images.weserv.nl/?url=${encodeURIComponent(rawUrl)}&default=${encodeURIComponent(rawUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`,
+        `https://corsproxy.io/?url=${encodeURIComponent(rawUrl)}`
+      ];
+
+      for (const target of proxyList) {
+        try {
+          const resp = await fetch(target);
+          if (resp.ok) {
+            const buf = await resp.arrayBuffer();
+            return new Uint8Array(buf);
+          }
+        } catch (_) {}
+      }
+      throw new Error("Unable to load remote media binary.");
+    }
+
+    function renderStaticImageToAscii(source) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = TARGET_W;
+          canvas.height = TARGET_H;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, TARGET_W, TARGET_H);
+          resolve(convertPixelsToAscii(ctx, TARGET_W, TARGET_H));
+        };
+        img.onerror = reject;
+        img.src = typeof source === "string" ? source : URL.createObjectURL(source);
+      });
+    }
+
+    async function mountAsciiPlayer(containerDiv, rawUrl) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "ascii-display-wrapper";
+
+      const pre = document.createElement("pre");
+      pre.className = "ascii-display";
+      pre.textContent = "[SYNCHRONIZING VISUAL STREAM...]";
+      wrapper.appendChild(pre);
+      containerDiv.appendChild(wrapper);
+      terminal.scrollTop = terminal.scrollHeight;
+
+      try {
+        const byteArray = await fetchRawBytes(rawUrl);
+        const isGif = byteArray[0] === 0x47 && byteArray[1] === 0x49 && byteArray[2] === 0x46;
+
+        if (isGif) {
+          const gr = new GifReader(byteArray);
+          const frameCount = gr.numFrames();
+          if (frameCount === 0) throw new Error("Zero frames detected");
+
+          const offCanvas = document.createElement("canvas");
+          offCanvas.width = gr.width;
+          offCanvas.height = gr.height;
+          const ctx = offCanvas.getContext("2d");
+          const imgData = ctx.createImageData(gr.width, gr.height);
+
+          const downCanvas = document.createElement("canvas");
+          downCanvas.width = TARGET_W;
+          downCanvas.height = TARGET_H;
+          const downCtx = downCanvas.getContext("2d");
+
+          const asciiFrames = [];
+          const frameDelays = [];
+
+          for (let i = 0; i < frameCount; i++) {
+            const info = gr.frameInfo(i);
+            gr.decodeAndBlitFrameRGBA(i, imgData.data);
+            ctx.putImageData(imgData, 0, 0);
+
+            downCtx.drawImage(offCanvas, 0, 0, TARGET_W, TARGET_H);
+            asciiFrames.push(convertPixelsToAscii(downCtx, TARGET_W, TARGET_H));
+
+            const delay = info.delay ? info.delay * 10 : 100;
+            frameDelays.push(delay < 20 ? 80 : delay);
+          }
+
+          let cur = 0;
+          function renderLoop() {
+            pre.textContent = asciiFrames[cur];
+            const curDelay = frameDelays[cur];
+            cur = (cur + 1) % asciiFrames.length;
+            setTimeout(renderLoop, curDelay);
+          }
+          renderLoop();
+        } else {
+          const blob = new Blob([byteArray]);
+          const asciiFrame = await renderStaticImageToAscii(blob);
+          pre.textContent = asciiFrame;
+        }
+      } catch (err) {
+        pre.textContent = "[STREAM RESTRICTED: CORS BLOCKED]\nTIP: Copy the image directly and press Ctrl+V.";
+      }
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    // Direct Image Paste (Guards against duplicate sending)
+    let isPasting = false;
+    window.addEventListener("paste", (e) => {
+      if (currentStep !== "CHAT" || isPasting) return;
+      const items = (e.clipboardData || window.clipboardData)?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf("image") !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            e.stopPropagation();
+            isPasting = true;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              if (messagesRef) {
+                messagesRef.push({
+                  user: currentUser,
+                  text: "",
+                  gifUrl: evt.target.result,
+                  time: getMilitaryTime()
+                });
+              }
+              setTimeout(() => { isPasting = false; }, 300);
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+      }
+    });
+
+    // Drag-and-Drop Handler
+    window.addEventListener("dragover", (e) => e.preventDefault());
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (currentStep !== "CHAT") return;
+      const file = e.dataTransfer.files[0];
+      if (file && (file.type.indexOf("image") !== -1 || file.name.match(/\.(gif|png|jpe?g|webp)$/i))) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          if (messagesRef) {
+            messagesRef.push({
+              user: currentUser,
+              text: "",
+              gifUrl: evt.target.result,
+              time: getMilitaryTime()
+            });
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
 
     // Input Handler & Command Parser
     input.addEventListener("keydown", async (e) => {
@@ -215,7 +450,7 @@
         headerUser.textContent = `CALLSIGN: ${currentUser}`;
         writeLine(`[OK] CALLSIGN REGISTERED: ${currentUser}`, "sys-msg");
         writeLine("DECRYPTING ARCHIVES & CONNECTING TO LIVE CHANNEL...", "sys-msg");
-        writeLine("AVAILABLE COMMANDS: /clear, /purge, /help, /whoami", "sys-msg");
+        writeLine("AVAILABLE COMMANDS: /clear, /purge, /help, /whoami, /mwa", "sys-msg");
         writeLine("-------------------------------------------------");
         
         promptLabel.textContent = `${currentUser}>`;
@@ -226,14 +461,12 @@
 
       // STAGE 3: LIVE TRANSMISSION & COMMANDS
       if (currentStep === "CHAT") {
-        // Command: /clear (Wipes current screen buffer only)
         if (val === "/clear") {
           terminal.innerHTML = "";
           writeLine("TERMINAL BUFFER CLEARED. ARCHIVES REMAIN IN DATABASE.", "sys-msg");
           return;
         }
 
-        // Command: /purge (Wipes persistent cloud database)
         if (val === "/purge") {
           if (confirm("WARNING: Purge will permanently delete all shared logs. Continue?")) {
             if (messagesRef) {
@@ -245,41 +478,42 @@
           return;
         }
 
-        // Command: /whoami
         if (val === "/whoami") {
           writeLine(`CURRENT OPERATOR: ${currentUser}`, "sys-msg");
           return;
         }
 
-        // Command: /help
         if (val === "/help") {
           writeLine("COMMAND DIRECTIVES:", "sys-msg");
           writeLine("  /clear   : Wipes local terminal screen");
           writeLine("  /purge   : Permanently deletes all saved messages from the cloud");
           writeLine("  /whoami  : Displays current active callsign");
+          writeLine("  /mwa     : Transmits love directive");
           return;
         }
 
-        // Hidden Command: /mwa
         if (val === "/mwa") {
           if (messagesRef) {
-            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             messagesRef.push({
               user: currentUser,
               text: HEART_ART,
-              time: timestamp
+              gifUrl: null,
+              time: getMilitaryTime()
             });
           }
           return;
         }
 
-        // Send Message to Firebase Realtime Database
+        // Automatic URL media detection
+        const detectedMedia = extractMediaUrl(val);
+        const textPayload = detectedMedia === val ? "" : val;
+
         if (messagesRef) {
-          const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
           messagesRef.push({
             user: currentUser,
-            text: val,
-            time: timestamp
+            text: textPayload,
+            gifUrl: detectedMedia || null,
+            time: getMilitaryTime()
           });
         }
       }
@@ -294,7 +528,6 @@
         db = firebase.database();
         messagesRef = db.ref("chat_logs");
 
-        // Listen for new messages & load initial message history
         messagesRef.on("child_added", (snapshot) => {
           const data = snapshot.val();
           if (!data) return;
@@ -302,10 +535,21 @@
           const isSelf = data.user === currentUser;
           const userClass = isSelf ? "user-self" : "user-peer";
           
-          writeLine(
-            `<span class="ts">[${data.time}]</span> <span class="${userClass}">&lt;${data.user}&gt;</span> <span class="msg-text">${escapeHtml(data.text)}</span>`,
-            "msg-row"
-          );
+          const container = document.createElement("div");
+          container.className = "msg-row";
+
+          const headerDiv = document.createElement("div");
+          headerDiv.className = "msg-header";
+          const textContent = data.text ? `<span class="msg-text">${escapeHtml(data.text)}</span>` : "";
+          headerDiv.innerHTML = `<span class="ts">[${data.time}]</span> <span class="${userClass}">&lt;${data.user}&gt;</span> ${textContent}`;
+          container.appendChild(headerDiv);
+
+          terminal.appendChild(container);
+          terminal.scrollTop = terminal.scrollHeight;
+
+          if (data.gifUrl) {
+            mountAsciiPlayer(container, data.gifUrl);
+          }
         });
 
       } catch (err) {
@@ -317,7 +561,6 @@
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    // Keep focus inside terminal input on click
     document.addEventListener("click", () => {
       input.focus();
     });
