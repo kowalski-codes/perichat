@@ -1,5 +1,9 @@
 {
   "appId": "com.kowalski.perichat",
   "appName": "PeriChat",
-  "webDir": "www"
+  "webDir": "www",
+  "server": {
+    "url": "https://kowalski-codes.github.io/perichat/",
+    "cleartext": true
+  }
 }
