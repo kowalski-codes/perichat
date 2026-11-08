@@ -18,16 +18,20 @@ jobs:
         with:
           node-version: 20
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
       - name: Prepare Web Assets & Install Dependencies
         run: |
           cd docs
-          # Create the webDir folder Capacitor expects
           mkdir -p www
-          # Copy website files into www, excluding android and node_modules
           cp index.html manifest.json *.png *.mp3 www/ 2>/dev/null || true
           npm install --save @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Add Android Platform Non-Interactively
+      - name: Add Android Platform
         run: |
           cd docs
           if [ ! -d "android" ]; then
@@ -36,16 +40,7 @@ jobs:
             npx cap sync android
           fi
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Build Debug APK
+      - name: Build Debug APK with Gradle
         run: |
           cd docs/android
           chmod +x gradlew
