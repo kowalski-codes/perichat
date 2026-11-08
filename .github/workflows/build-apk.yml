@@ -18,9 +18,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies
+      - name: Prepare Web Assets & Install Dependencies
         run: |
           cd docs
+          # Create the webDir folder Capacitor expects
+          mkdir -p www
+          # Copy website files into www, excluding android and node_modules
+          cp index.html manifest.json *.png *.mp3 www/ 2>/dev/null || true
           npm install --save @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Add Android Platform Non-Interactively
