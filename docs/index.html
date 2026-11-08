@@ -35,6 +35,19 @@
       position: relative;
     }
 
+    @keyframes screen-shake {
+      0% { transform: translate(0, 0); }
+      20% { transform: translate(-5px, 5px); }
+      40% { transform: translate(-5px, -5px); }
+      60% { transform: translate(5px, 5px); }
+      80% { transform: translate(5px, -5px); }
+      100% { transform: translate(0, 0); }
+    }
+
+    .shake {
+      animation: screen-shake 0.35s ease-in-out;
+    }
+
     header {
       background: var(--bar-bg);
       border-bottom: 1px solid var(--phosphor-dim);
@@ -191,10 +204,7 @@
     }
   </style>
 
-  <!-- omggif: GIF binary decoder -->
   <script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
-
-  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
@@ -222,7 +232,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
     const SECRET_PASSWORD = "@kcguevS08w";
     let attemptsRemaining = 3;
 
-    // perichat Firebase Credentials
     const firebaseConfig = {
       apiKey: "AIzaSyA_hKOx4wb17A3PItA32pHLuXgofG2P9Ig",
       authDomain: "retro-terminal-aa057.firebaseapp.com",
@@ -241,6 +250,7 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
 
     const soundJoin = new Audio("join.mp3");
     const soundMsg = new Audio("msg.mp3");
+    const soundBuzz = new Audio("buzz.mp3");
 
     const terminal = document.getElementById("terminal");
     const input = document.getElementById("cmd-input");
@@ -264,6 +274,17 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
     }
     setInterval(updateClock, 1000);
     updateClock();
+
+    function triggerBuzz() {
+      soundBuzz.currentTime = 0;
+      soundBuzz.play().catch(() => {});
+      document.body.classList.remove("shake");
+      void document.body.offsetWidth;
+      document.body.classList.add("shake");
+      setTimeout(() => {
+        document.body.classList.remove("shake");
+      }, 400);
+    }
 
     function typeTextPromise(targetElement, fullText, speed = 14) {
       return new Promise((resolve) => {
@@ -364,7 +385,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
       initFirebase();
     }
 
-    // --- HIGH-DENSITY ASCII ENGINE (STATIC IMAGES & ANIMATED GIFS) ---
     const DENSITY_RAMP = " .:-=+*#%@";
     const TARGET_W = 80;
     const TARGET_H = 36;
@@ -510,7 +530,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
       terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Direct Image Paste (Single listener with stopPropagation)
     let isPasting = false;
     window.addEventListener("paste", (e) => {
       if (currentStep !== "CHAT" || isPasting) return;
@@ -544,7 +563,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
       }
     });
 
-    // Drag-and-Drop Handler
     window.addEventListener("dragover", (e) => e.preventDefault());
     window.addEventListener("drop", (e) => {
       e.preventDefault();
@@ -566,7 +584,6 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
       }
     });
 
-    // Input Prompt & Commands
     input.addEventListener("keydown", async (e) => {
       if (e.key !== "Enter") return;
       const val = input.value.trim();
@@ -631,6 +648,18 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
           return;
         }
 
+        if (val === "/buzz" || val === "/nudge") {
+          if (messagesRef) {
+            messagesRef.push({
+              type: "buzz",
+              user: currentUser,
+              text: `>>> [NUDGE SIGNAL] TRANSMITTED BY <${currentUser}> <<<`,
+              time: getMilitaryTime()
+            });
+          }
+          return;
+        }
+
         if (val === "/help") {
           const helpManual = 
 `======================= COMMAND DIRECTIVES =======================
@@ -639,6 +668,7 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
   /help      Display terminal manual & directives
   /clear     Flush local terminal screen buffer
   /whoami    Display active operator handle
+  /buzz      Transmit high-priority alert & screen vibration
   /purge     Permanently erase all archived logs from cloud
 ==================================================================`;
           writeLine(helpManual, "sys-msg");
@@ -669,12 +699,37 @@ AUTHENTICATION ATTEMPTS REMAINING: 3</div>
 
         messagesRef.once("value", () => {
           isInitialLoadDone = true;
+          // Broadcast operator entry notification to peers
+          messagesRef.push({
+            type: "system",
+            text: `>>> [SIGNAL DETECTED] OPERATOR <${currentUser}> HAS ENTERED THE NODE.`,
+            time: getMilitaryTime()
+          });
         });
 
         messagesRef.on("child_added", (snapshot) => {
           const data = snapshot.val();
           if (!data) return;
 
+          // System Login Notification Event
+          if (data.type === "system") {
+            writeLine(`<span class="ts">[${data.time}]</span> <span class="sys-msg">${escapeHtml(data.text)}</span>`, "msg-row");
+            if (isInitialLoadDone && data.user !== currentUser) {
+              soundJoin.play().catch(() => {});
+            }
+            return;
+          }
+
+          // Buzz / Nudge Event
+          if (data.type === "buzz") {
+            writeLine(`<span class="ts">[${data.time}]</span> <span class="sys-err">${escapeHtml(data.text)}</span>`, "msg-row");
+            if (isInitialLoadDone) {
+              triggerBuzz();
+            }
+            return;
+          }
+
+          // Standard Chat Message
           const isSelf = data.user === currentUser;
           const userClass = isSelf ? "user-self" : "user-peer";
           const prefix = `<span class="ts">[${data.time}]</span> <span class="${userClass}">&lt;${data.user}&gt;</span> `;
